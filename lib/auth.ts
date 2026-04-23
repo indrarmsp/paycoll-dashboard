@@ -2,27 +2,22 @@ import type { Role, SessionData } from './types';
 
 export const SESSION_COOKIE_NAME = 'pc_session';
 export const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
-export const LOGIN_MAX_ATTEMPTS = 5;
-export const LOGIN_LOCK_MS = 60 * 1000;
 
+// Reads and trims credentials from environment variables.
 function readEnvValue(name: string) {
   return process.env[name]?.trim() || '';
 }
 
+// Maps a role to the corresponding login credentials.
 export function getLoginCredentials(role: Role) {
-  if (role === 'ar') {
-    return {
-      username: readEnvValue('PC_AR_USERNAME'),
-      password: readEnvValue('PC_AR_PASSWORD')
-    };
-  }
-
+  const prefix = role === 'ar' ? 'PC_AR' : 'PC_ADMIN';
   return {
-    username: readEnvValue('PC_ADMIN_USERNAME'),
-    password: readEnvValue('PC_ADMIN_PASSWORD')
+    username: readEnvValue(`${prefix}_USERNAME`),
+    password: readEnvValue(`${prefix}_PASSWORD`)
   };
 }
 
+// Creates a lightweight device fingerprint from stable headers.
 export function buildFingerprint(userAgent = '', acceptLanguage = '', platform = '') {
   const source = [userAgent, acceptLanguage, platform].join('|');
   let hash = 0;
@@ -51,6 +46,7 @@ export function buildFingerprintFromHeaders(headers: Headers | Record<string, st
   );
 }
 
+// Creates a short-lived session payload after successful login.
 export function createSession(role: Role, username: string, fingerprint: string): SessionData {
   const issuedAt = Date.now();
   return {
@@ -62,10 +58,12 @@ export function createSession(role: Role, username: string, fingerprint: string)
   };
 }
 
+// Encodes the session object into a cookie-safe string.
 export function encodeSession(session: SessionData) {
   return encodeURIComponent(JSON.stringify(session));
 }
 
+// Decodes and validates the session structure from the cookie value.
 export function decodeSession(rawValue: string | undefined | null): SessionData | null {
   if (!rawValue) {
     return null;
@@ -93,6 +91,7 @@ export function decodeSession(rawValue: string | undefined | null): SessionData 
   }
 }
 
+// Validates session ownership and expiration against current request fingerprint.
 export function isSessionValid(session: SessionData | null, fingerprint: string) {
   if (!session) {
     return false;
@@ -105,6 +104,7 @@ export function isSessionValid(session: SessionData | null, fingerprint: string)
   return Date.now() < session.expiresAt;
 }
 
+// Resolves default post-login route by role.
 export function getRedirectPath(role: Role) {
   return role === 'ar' ? '/dashboard-ar' : '/dashboard';
 }

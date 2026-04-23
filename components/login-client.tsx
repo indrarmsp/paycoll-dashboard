@@ -14,6 +14,10 @@ type SecurityState = {
 
 const SECURITY_KEY = 'pcLoginSecurity';
 
+const LOGIN_FAIL_LIMIT = 5;
+const LOGIN_LOCK_MS = 60_000;
+
+// Reads local lockout state used for brute-force throttling in the UI.
 function readSecurityState(): SecurityState {
   if (typeof window === 'undefined') {
     return { failedCount: 0, lockUntil: 0 };
@@ -39,8 +43,31 @@ function writeSecurityState(state: SecurityState) {
   localStorage.setItem(SECURITY_KEY, JSON.stringify(state));
 }
 
+// Resets lockout counters after a successful login.
 function clearSecurityState() {
   writeSecurityState({ failedCount: 0, lockUntil: 0 });
+}
+
+// Preloads dashboard data and route for smoother redirect after login.
+function prewarmAndPrefetch(mode: LoginMode, router: ReturnType<typeof useRouter>) {
+  if (mode === 'admin') {
+    void warmMainDashboardCache();
+    void router.prefetch('/dashboard');
+    return;
+  }
+
+  void warmARDashboardCache();
+  void router.prefetch('/dashboard-ar');
+}
+
+// Calculates the next lockout state after a failed attempt.
+function buildFailedSecurityState(current: SecurityState, now: number): SecurityState {
+  const failedCount = current.failedCount + 1;
+  if (failedCount >= LOGIN_FAIL_LIMIT) {
+    return { failedCount: 0, lockUntil: now + LOGIN_LOCK_MS };
+  }
+
+  return { failedCount, lockUntil: 0 };
 }
 
 export function LoginClient() {
@@ -76,14 +103,7 @@ export function LoginClient() {
   }, [reasonMessage, router]);
 
   useEffect(() => {
-    if (mode === 'admin') {
-      void warmMainDashboardCache();
-      void router.prefetch('/dashboard');
-      return;
-    }
-
-    void warmARDashboardCache();
-      void router.prefetch('/dashboard-ar');
+    prewarmAndPrefetch(mode, router);
   }, [mode, router]);
 
   useEffect(() => {
@@ -103,6 +123,7 @@ export function LoginClient() {
     return () => window.clearInterval(timer);
   }, [error]);
 
+  // Validates inputs, checks lockout policy, and calls the login API.
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -147,24 +168,16 @@ export function LoginClient() {
       const payload = await response.json() as { ok: boolean; message?: string; redirectTo?: string };
 
       if (!response.ok || !payload.ok) {
-        const failedCount = currentSecurity.failedCount + 1;
-        const lockUntil = failedCount >= 5 ? now + 60_000 : 0;
-        const nextState = lockUntil ? { failedCount: 0, lockUntil } : { failedCount, lockUntil: 0 };
+        const nextState = buildFailedSecurityState(currentSecurity, now);
         writeSecurityState(nextState);
         setSecurity(nextState);
-        setError(lockUntil ? 'Too many attempts. Try again in 60s' : (payload.message || 'Invalid credentials'));
+        setError(nextState.lockUntil ? 'Too many attempts. Try again in 60s' : (payload.message || 'Invalid credentials'));
         return;
       }
 
       clearSecurityState();
       setError('');
-      if (mode === 'admin') {
-        void warmMainDashboardCache();
-        void router.prefetch('/dashboard');
-      } else {
-        void warmARDashboardCache();
-        void router.prefetch('/dashboard-ar');
-      }
+      prewarmAndPrefetch(mode, router);
       router.replace(payload.redirectTo || (mode === 'ar' ? '/dashboard-ar' : '/dashboard'));
       router.refresh();
     } catch {

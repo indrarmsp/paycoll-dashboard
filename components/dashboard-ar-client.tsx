@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Download, LoaderCircle, X } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import type { ARRow } from '../lib/types';
+import { getVisiblePageNumbers } from '../lib/pagination';
 import { formatNumber, readARDashboardCache, writeARDashboardCache } from '../lib/sheets';
 
 type ExportColumn = {
@@ -23,24 +23,28 @@ const EXPORT_COLUMNS: ExportColumn[] = [
   { key: 'longitude', label: 'Longitude', getValue: (row) => row.longitude }
 ];
 
-function getVisiblePageNumbers(currentPage: number, maxPage: number) {
-  let start = Math.max(1, currentPage - 2);
-  let end = Math.min(maxPage, start + 4);
-
-  if (end - start < 4) {
-    start = Math.max(1, end - 4);
-  }
-
-  const pages: number[] = [];
-  for (let page = start; page <= end; page += 1) {
-    pages.push(page);
-  }
-  return pages;
-}
-
 type DashboardARClientProps = {
   initialData?: ARRow[] | null;
 };
+
+function getExportColumns(selectedExportColumns: string[]) {
+  return EXPORT_COLUMNS.filter((column) => selectedExportColumns.includes(String(column.key)));
+}
+
+function buildExportFilename(currentPage: number, exportCurrentPageOnly: boolean) {
+  const now = new Date();
+  const stamp = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0')
+  ].join('');
+  const suffix = exportCurrentPageOnly ? `_page${currentPage}` : '';
+  return `visit_ar_${stamp}${suffix}.xlsx`;
+}
+
+function toErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
 
 export function DashboardARClient({ initialData }: DashboardARClientProps) {
   const [rows, setRows] = useState<ARRow[]>(initialData ?? []);
@@ -54,18 +58,32 @@ export function DashboardARClient({ initialData }: DashboardARClientProps) {
   const [exportCurrentPageOnly, setExportCurrentPageOnly] = useState(false);
   const [selectedExportColumns, setSelectedExportColumns] = useState<string[]>(EXPORT_COLUMNS.map((column) => String(column.key)));
 
+  function applyRows(nextRows: ARRow[]) {
+    setRows(nextRows);
+    writeARDashboardCache(nextRows);
+    setLoading(false);
+  }
+
+  async function fetchArRows() {
+    const response = await fetch('/api/sheets/ar');
+    const payload = await response.json() as { rows?: ARRow[]; message?: string };
+
+    if (!response.ok) {
+      throw new Error(payload.message || 'Failed to load AR data');
+    }
+
+    return payload.rows || [];
+  }
+
   useEffect(() => {
     const cachedRows = readARDashboardCache();
     if (cachedRows?.length) {
-      setRows(cachedRows);
-      setLoading(false);
+      applyRows(cachedRows);
       return;
     }
 
     if (initialData?.length) {
-      setRows(initialData);
-      writeARDashboardCache(initialData);
-      setLoading(false);
+      applyRows(initialData);
       return;
     }
 
@@ -74,24 +92,17 @@ export function DashboardARClient({ initialData }: DashboardARClientProps) {
     async function loadData() {
       try {
         setLoading(true);
-        const response = await fetch('/api/sheets/ar');
-        const payload = await response.json() as { rows?: ARRow[]; message?: string };
+        const nextRows = await fetchArRows();
 
-        if (!response.ok) {
-          throw new Error(payload.message || 'Failed to load AR data');
-        }
-
-        if (!cancelled && payload.rows?.length) {
-          setRows(payload.rows || []);
-          writeARDashboardCache(payload.rows || []);
-          setLoading(false);
+        if (!cancelled && nextRows.length) {
+          applyRows(nextRows);
         }
       } catch (loadError) {
         if (cancelled) {
           return;
         }
 
-        setError(loadError instanceof Error ? loadError.message : 'Failed to load AR data');
+        setError(toErrorMessage(loadError, 'Failed to load AR data'));
         setLoading(false);
       }
     }
@@ -150,12 +161,7 @@ export function DashboardARClient({ initialData }: DashboardARClientProps) {
   }
 
   function handleDownload() {
-    if (typeof XLSX === 'undefined') {
-      window.alert('XLSX library is not available yet. Please reload the page.');
-      return;
-    }
-
-    const selectedColumns = EXPORT_COLUMNS.filter((column) => selectedExportColumns.includes(String(column.key)));
+    const selectedColumns = getExportColumns(selectedExportColumns);
 
     if (!selectedColumns.length) {
       window.alert('Select at least 1 column to export.');
@@ -177,14 +183,34 @@ export function DashboardARClient({ initialData }: DashboardARClientProps) {
       return record;
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(exportRows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Visit AR');
+    const filename = buildExportFilename(currentPage, exportCurrentPageOnly);
 
-    const now = new Date();
-    const stamp = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('');
-    const suffix = exportCurrentPageOnly ? `_page${currentPage}` : '';
-    XLSX.writeFile(workbook, `visit_ar_${stamp}${suffix}.xlsx`);
+    // Call export API
+    fetch('/api/export/dashboard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename,
+        sheetName: 'Visit AR',
+        data: exportRows
+      })
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(`Export failed: ${response.statusText}`);
+        return response.blob();
+      })
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+      })
+      .catch((error) => {
+        window.alert(`Export failed: ${error.message}`);
+      });
+
     closeExportModal();
   }
 

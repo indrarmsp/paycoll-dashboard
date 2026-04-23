@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { buildFingerprintFromHeaders, createSession, encodeSession, getLoginCredentials, getRedirectPath } from '../../../../lib/auth';
+import { buildFingerprintFromHeaders, createSession, encodeSession, getLoginCredentials, getRedirectPath, SESSION_COOKIE_NAME } from '../../../../lib/auth';
 import type { Role } from '../../../../lib/types';
 
+// Validates credentials, issues a session cookie, and returns role-aware redirect path.
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as { mode?: Role; username?: string; password?: string };
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({ ok: true, redirectTo: getRedirectPath(mode) });
 
     response.cookies.set({
-      name: 'pc_session',
+      name: SESSION_COOKIE_NAME,
       value: encodeSession(session),
       httpOnly: true,
       sameSite: 'lax',

@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { buildFingerprintFromHeaders, decodeSession, getRedirectPath, isSessionValid, SESSION_COOKIE_NAME } from './lib/auth';
 
 const PUBLIC_PATHS = new Set(['/api/auth/login', '/api/auth/logout', '/api/sheets/main', '/api/sheets/ar']);
-const PROTECTED_PREFIXES = ['/dashboard', '/shortcuts', '/dashboard-ar'];
+const PROTECTED_PREFIXES = ['/dashboard', '/shortcuts', '/dashboard-ar', '/update'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -48,6 +48,10 @@ export function middleware(request: NextRequest) {
     }
 
     if (pathname === '/dashboard' && session.role !== 'admin') {
+      return NextResponse.redirect(new URL('/login?reason=unauthorized', request.url));
+    }
+
+    if (pathname === '/update' && session.role !== 'admin') {
       return NextResponse.redirect(new URL('/login?reason=unauthorized', request.url));
     }
 

@@ -49,7 +49,6 @@ export function ShortcutsClient() {
   const [store, setStore] = useState<ShortcutStore>(getDefaultShortcutStore());
   const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
-  const [deleteShortcutModalOpen, setDeleteShortcutModalOpen] = useState(false);
   const [shortcutForm, setShortcutForm] = useState<ShortcutFormState>(emptyShortcutForm);
   const [categoryName, setCategoryName] = useState('');
   const [pendingDeleteShortcut, setPendingDeleteShortcut] = useState<ShortcutItem | null>(null);
@@ -94,6 +93,10 @@ export function ShortcutsClient() {
 
   const hasVisibleShortcuts = store.categories.some((category) => (groupedShortcuts[category.id] || []).length > 0);
 
+  function updateShortcutForm<K extends keyof ShortcutFormState>(field: K, value: ShortcutFormState[K]) {
+    setShortcutForm((current) => ({ ...current, [field]: value }));
+  }
+
   function openShortcutModal(defaultCategoryId?: string) {
     const fallbackCategoryId = defaultCategoryId || store.categories[0]?.id || '';
     setShortcutForm({ ...emptyShortcutForm, categoryId: fallbackCategoryId });
@@ -131,7 +134,6 @@ export function ShortcutsClient() {
 
   function closeDeleteShortcutModal() {
     setPendingDeleteShortcut(null);
-    setDeleteShortcutModalOpen(false);
   }
 
   function saveCategory() {
@@ -215,7 +217,6 @@ export function ShortcutsClient() {
     }
 
     setPendingDeleteShortcut(shortcut);
-    setDeleteShortcutModalOpen(true);
   }
 
   function confirmDeleteShortcut() {
@@ -395,7 +396,7 @@ export function ShortcutsClient() {
                   <input
                     type="text"
                     value={shortcutForm.name}
-                    onChange={(event) => setShortcutForm((current) => ({ ...current, name: event.target.value }))}
+                    onChange={(event) => updateShortcutForm('name', event.target.value)}
                     required
                     placeholder="e.g. HR Portal"
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 transition-shadow focus:outline-none focus:ring-2 focus:ring-brand-500"
@@ -406,7 +407,7 @@ export function ShortcutsClient() {
                   <input
                     type="text"
                     value={shortcutForm.url}
-                    onChange={(event) => setShortcutForm((current) => ({ ...current, url: event.target.value }))}
+                    onChange={(event) => updateShortcutForm('url', event.target.value)}
                     required
                     placeholder="https://example.com"
                     autoComplete="off"
@@ -418,7 +419,7 @@ export function ShortcutsClient() {
                   <input
                     type="text"
                     value={shortcutForm.icon}
-                    onChange={(event) => setShortcutForm((current) => ({ ...current, icon: event.target.value }))}
+                    onChange={(event) => updateShortcutForm('icon', event.target.value)}
                     placeholder="🌐 or https://.../icon.png"
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 transition-shadow focus:outline-none focus:ring-2 focus:ring-brand-500"
                   />
@@ -428,7 +429,7 @@ export function ShortcutsClient() {
                   <label className="mb-1 block text-sm font-medium text-slate-700">Category</label>
                   <select
                     value={shortcutForm.categoryId}
-                    onChange={(event) => setShortcutForm((current) => ({ ...current, categoryId: event.target.value }))}
+                    onChange={(event) => updateShortcutForm('categoryId', event.target.value)}
                     className="w-full rounded-lg border border-slate-200 px-3 py-2 transition-shadow focus:outline-none focus:ring-2 focus:ring-brand-500"
                   >
                     {store.categories.map((category) => (
@@ -450,7 +451,7 @@ export function ShortcutsClient() {
         </div>
       ) : null}
 
-      {deleteShortcutModalOpen ? (
+      {pendingDeleteShortcut ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm" onClick={(event) => {
           if (event.target === event.currentTarget) {
             closeDeleteShortcutModal();

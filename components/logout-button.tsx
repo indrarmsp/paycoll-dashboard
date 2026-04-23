@@ -4,9 +4,15 @@ import { LogOut } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import type { MouseEvent } from 'react';
 
+// Handles session logout then redirects to a safe destination.
 export function LogoutButton({ className }: { className?: string }) {
   const router = useRouter();
   const pathname = usePathname();
+
+  function redirectTo(path: string) {
+    router.replace(path);
+    router.refresh();
+  }
 
   async function handleLogout(event: MouseEvent<HTMLAnchorElement | HTMLButtonElement>) {
     event.preventDefault();
@@ -22,13 +28,11 @@ export function LogoutButton({ className }: { className?: string }) {
     const payload = await response.json() as { redirectTo?: string };
 
     if (payload.redirectTo) {
-      router.replace(payload.redirectTo);
-      router.refresh();
+      redirectTo(payload.redirectTo);
       return;
     }
 
-    router.replace('/login?reason=logged_out');
-    router.refresh();
+    redirectTo('/login?reason=logged_out');
   }
 
   return (

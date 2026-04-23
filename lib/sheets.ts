@@ -24,6 +24,7 @@ type GoogleSheetResponse = {
   };
 };
 
+// Builds a Google Visualization API request URL with optional query override.
 export function buildSheetRequestUrl(url: string, query?: string) {
   if (!url) {
     return '';
@@ -38,6 +39,7 @@ export function buildSheetRequestUrl(url: string, query?: string) {
   return requestUrl.toString();
 }
 
+// Extracts and parses JSON payload from Google Visualization wrapper response.
 export function parseGoogleSheetResponse(text: string): GoogleSheetResponse {
   const marker = 'google.visualization.Query.setResponse('; 
   const start = text.indexOf(marker);
@@ -56,6 +58,7 @@ export function parseGoogleSheetResponse(text: string): GoogleSheetResponse {
   return JSON.parse(text.slice(payloadStart, payloadEnd)) as GoogleSheetResponse;
 }
 
+// Fetches sheet data with timeout support and optional no-store refresh.
 export async function fetchGoogleSheetData(url: string, options?: { query?: string; timeoutMs?: number; forceRefresh?: boolean }) {
   if (!url) {
     return { table: { cols: [], rows: [] } };
@@ -88,6 +91,7 @@ export async function fetchGoogleSheetData(url: string, options?: { query?: stri
   }
 }
 
+// Reads cached main dashboard data from sessionStorage when still fresh.
 export function readMainDashboardCache() {
   if (typeof window === 'undefined') {
     return null;
@@ -115,6 +119,7 @@ export function readMainDashboardCache() {
   }
 }
 
+// Stores main dashboard payload in sessionStorage with timestamp metadata.
 export function writeMainDashboardCache(payload: MainDashboardPayload) {
   if (typeof window === 'undefined') {
     return;
@@ -130,6 +135,7 @@ export function writeMainDashboardCache(payload: MainDashboardPayload) {
   }
 }
 
+// Warms main dashboard cache by prefetching API once per page lifecycle.
 export function warmMainDashboardCache() {
   if (typeof window === 'undefined') {
     return Promise.resolve(null);
@@ -164,6 +170,7 @@ export function warmMainDashboardCache() {
 }
 
 export function getWarmMainDashboardPromise() {
+  // Returns in-flight warmup promise so callers can avoid duplicate fetches.
   if (typeof window === 'undefined') {
     return null;
   }
@@ -171,6 +178,7 @@ export function getWarmMainDashboardPromise() {
   return window.__pcWarmMainDashboardPromise || null;
 }
 
+// Reads cached AR dashboard rows from sessionStorage when still fresh.
 export function readARDashboardCache() {
   if (typeof window === 'undefined') {
     return null;
@@ -198,6 +206,7 @@ export function readARDashboardCache() {
   }
 }
 
+// Stores AR dashboard payload in sessionStorage with timestamp metadata.
 export function writeARDashboardCache(payload: ARRow[]) {
   if (typeof window === 'undefined') {
     return;
@@ -213,6 +222,7 @@ export function writeARDashboardCache(payload: ARRow[]) {
   }
 }
 
+// Warms AR dashboard cache by prefetching API once per page lifecycle.
 export function warmARDashboardCache() {
   if (typeof window === 'undefined') {
     return Promise.resolve(null);
@@ -247,14 +257,7 @@ export function warmARDashboardCache() {
   return window.__pcWarmARDashboardPromise;
 }
 
-export function getWarmARDashboardPromise() {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  return window.__pcWarmARDashboardPromise || null;
-}
-
+// Server-side bootstrap payload for the main dashboard route.
 export const getMainDashboardBootstrap = unstable_cache(
   async () => {
     if (!MAIN_SHEET_URL) {
@@ -273,6 +276,7 @@ export const getMainDashboardBootstrap = unstable_cache(
   { revalidate: 300 }
 );
 
+// Server-side bootstrap payload for the AR dashboard route.
 export const getARDashboardBootstrap = unstable_cache(
   async () => {
     if (!AR_SHEET_URL) {
@@ -302,10 +306,12 @@ export function formatCurrency(num: number) {
   }).format(num);
 }
 
+// Formats numbers with locale separators for table/card display.
 export function formatNumber(num: number) {
   return new Intl.NumberFormat('id-ID').format(num);
 }
 
+// Maps raw main sheet rows into typed dashboard rows, filters, and chart stats.
 export function parseMainRows(table: NonNullable<GoogleSheetResponse['table']>): MainDashboardPayload {
   const rows = Array.isArray(table.rows) ? table.rows : [];
   const columnCount = Array.isArray(table.cols) ? table.cols.length : 0;
@@ -427,6 +433,7 @@ export function parseMainRows(table: NonNullable<GoogleSheetResponse['table']>):
   };
 }
 
+// Maps raw AR sheet rows into typed AR table rows with normalized coordinates.
 export function parseARRows(table: NonNullable<GoogleSheetResponse['table']>): ARRow[] {
   const rows = Array.isArray(table.rows) ? table.rows : [];
 

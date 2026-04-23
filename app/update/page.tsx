@@ -1,20 +1,21 @@
 import { AppShell } from '../../components/app-shell';
-import { ShortcutsClient } from '../../components/shortcuts-client';
+import { UpdateClient } from '../../components/update-client';
 import { buildAdminNavItems } from '../../lib/nav-items';
 import { requireServerSession } from '../../lib/server-auth';
 
-export default async function ShortcutsPage() {
+// Admin-only page that hosts the two update actions.
+export default async function UpdatePage() {
   await requireServerSession(['admin']);
 
   return (
     <AppShell
       sidebarTitle="Payment Collective"
-      headerTitle="Shortcuts"
+      headerTitle="Update Data"
       avatarLabel="Admin"
       avatarName="Admin"
-      navItems={buildAdminNavItems('shortcuts')}
+      navItems={buildAdminNavItems('update')}
     >
-      <ShortcutsClient />
+      <UpdateClient />
     </AppShell>
   );
 }

@@ -1,10 +1,11 @@
 import { AppShell } from '../../components/app-shell';
 import { DashboardClient } from '../../components/dashboard-client';
+import { buildAdminNavItems } from '../../lib/nav-items';
 import { requireServerSession } from '../../lib/server-auth';
 import { getMainDashboardBootstrap } from '../../lib/sheets';
 
 export default async function DashboardPage() {
-  const session = await requireServerSession(['admin']);
+  await requireServerSession(['admin']);
   const initialData = await getMainDashboardBootstrap();
 
   return (
@@ -13,13 +14,9 @@ export default async function DashboardPage() {
       headerTitle="Dashboard"
       avatarLabel="Admin"
       avatarName="Admin"
-      navItems={[
-        { href: '/dashboard', label: 'Dashboard', icon: 'dashboard', active: true },
-        { href: '/shortcuts', label: 'Shortcuts', icon: 'shortcuts', active: false },
-        { href: '/dashboard-ar', label: 'Visit AR', icon: 'ar', active: false }
-      ]}
+      navItems={buildAdminNavItems('dashboard')}
     >
-      <DashboardClient username={session.username} initialData={initialData} />
+      <DashboardClient initialData={initialData} />
     </AppShell>
   );
 }

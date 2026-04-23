@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { fetchGoogleSheetData, MAIN_SHEET_URL, parseMainRows } from '../../../../lib/sheets';
 
+// Returns dashboard rows, with optional `limit` query for lightweight boot payloads.
 export async function GET(request: Request) {
   try {
     if (!MAIN_SHEET_URL) {
@@ -10,14 +11,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const limit = searchParams.get('limit');
 
-    if (!limit) {
-      const data = await fetchGoogleSheetData(MAIN_SHEET_URL, {
-        query: 'select *'
-      });
-      return NextResponse.json(parseMainRows(data.table || {}));
-    }
-
-    const query = `select * limit ${Number(limit)}`;
+    const parsedLimit = Number(limit);
+    const query = limit && Number.isFinite(parsedLimit) && parsedLimit > 0
+      ? `select * limit ${parsedLimit}`
+      : 'select *';
     const data = await fetchGoogleSheetData(MAIN_SHEET_URL, { query });
     return NextResponse.json(parseMainRows(data.table || {}));
   } catch (error) {

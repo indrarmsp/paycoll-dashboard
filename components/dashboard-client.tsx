@@ -14,12 +14,11 @@ import {
   X
 } from 'lucide-react';
 import Chart from 'chart.js/auto';
-import * as XLSX from 'xlsx';
 import type { DashboardStats, FilterOptions, MainDashboardPayload, MainRow } from '../lib/types';
+import { getVisiblePageNumbers } from '../lib/pagination';
 import { formatCurrency, formatNumber, getWarmMainDashboardPromise, readMainDashboardCache, warmMainDashboardCache, writeMainDashboardCache, MAIN_DASHBOARD_BOOT_LIMIT } from '../lib/sheets';
 
 type DashboardClientProps = {
-  username: string;
   initialData?: {
     rows: MainRow[];
     filterOptions: FilterOptions;
@@ -63,21 +62,6 @@ const EXPORT_COLUMNS: ExportColumn[] = [
   { key: 'email', label: 'Email', getValue: (row) => row.email },
   { key: 'paidStatus', label: 'Status', getValue: (row) => row.paidL11 || 'UNPAID' }
 ];
-
-function getVisiblePageNumbers(currentPage: number, maxPage: number) {
-  let start = Math.max(1, currentPage - 2);
-  let end = Math.min(maxPage, start + 4);
-
-  if (end - start < 4) {
-    start = Math.max(1, end - 4);
-  }
-
-  const pages: number[] = [];
-  for (let page = start; page <= end; page += 1) {
-    pages.push(page);
-  }
-  return pages;
-}
 
 function ChartCard({
   title,
@@ -240,7 +224,7 @@ function ChartCard({
   );
 }
 
-export function DashboardClient({ username, initialData }: DashboardClientProps) {
+export function DashboardClient({ initialData }: DashboardClientProps) {
   const [rows, setRows] = useState<MainRow[]>(initialData?.rows ?? []);
   const [filterOptions, setFilterOptions] = useState<FilterOptions>(initialData?.filterOptions ?? { datel: [], billCategory: [], umurCustomer: [] });
   const [stats, setStats] = useState<DashboardStats>(initialData?.stats ?? { categoryStats: {}, paidCount: 0, unpaidCount: 0 });
@@ -561,11 +545,6 @@ export function DashboardClient({ username, initialData }: DashboardClientProps)
   }
 
   function handleDownload() {
-    if (typeof XLSX === 'undefined') {
-      window.alert('XLSX library is not available yet. Please reload the page.');
-      return;
-    }
-
     if (!hydrationDone) {
       window.alert('Data is still syncing in background. Please wait a moment and try again.');
       return;
@@ -593,14 +572,37 @@ export function DashboardClient({ username, initialData }: DashboardClientProps)
       return record;
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(exportRows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Dashboard');
-
     const now = new Date();
     const stamp = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('');
     const suffix = exportCurrentPageOnly ? `_page${currentPage}` : '';
-    XLSX.writeFile(workbook, `dashboard_${stamp}${suffix}.xlsx`);
+    const filename = `dashboard_${stamp}${suffix}.xlsx`;
+
+    // Call export API
+    fetch('/api/export/dashboard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename,
+        sheetName: 'Dashboard',
+        data: exportRows
+      })
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(`Export failed: ${response.statusText}`);
+        return response.blob();
+      })
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+      })
+      .catch((error) => {
+        window.alert(`Export failed: ${error.message}`);
+      });
+
     closeExportModal();
   }
 

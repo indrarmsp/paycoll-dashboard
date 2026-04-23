@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { buildFingerprintFromHeaders, decodeSession, getRedirectPath, isSessionValid, SESSION_COOKIE_NAME } from './auth';
 import type { Role, SessionData } from './types';
 
+// Reads and validates the current request session on the server.
 export async function getServerSession(): Promise<SessionData | null> {
   const cookieStore = await cookies();
   const rawValue = cookieStore.get(SESSION_COOKIE_NAME)?.value;
@@ -17,6 +18,7 @@ export async function getServerSession(): Promise<SessionData | null> {
   return session;
 }
 
+// Enforces role access and redirects unauthenticated users.
 export async function requireServerSession(allowedRoles: Role[]) {
   const session = await getServerSession();
   if (!session || !allowedRoles.includes(session.role)) {
@@ -26,6 +28,7 @@ export async function requireServerSession(allowedRoles: Role[]) {
   return session;
 }
 
+// Redirects away from login page when an active session already exists.
 export async function redirectIfAuthed() {
   const session = await getServerSession();
   if (session) {

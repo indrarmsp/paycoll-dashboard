@@ -1,10 +1,14 @@
 # Payment Collective Dashboard (Next.js)
 
 Internal dashboard application built with Next.js (App Router) for two roles:
-- **Admin**: main billing dashboard and shortcuts manager.
+- **Admin**: main billing dashboard, update tools, and shortcuts manager.
 - **AR**: AR visit dashboard.
 
-Data is fetched from Google Sheets (Visualization API response format) and rendered as tables/charts, with XLSX export support.
+Data is fetched from Google Sheets in two ways:
+- Google Visualization API endpoints (for main and AR dashboards).
+- Google Sheets API (service account) for update/sync write operations.
+
+The app includes XLSX export, role-based auth, and protected route navigation.
 
 ## Tech Stack
 
@@ -13,23 +17,30 @@ Data is fetched from Google Sheets (Visualization API response format) and rende
 - TypeScript
 - Tailwind CSS
 - Chart.js
-- xlsx
+- ExcelJS
+- Google APIs (`googleapis`, `google-auth-library`)
+- Lucide React icons
 
 ## Features
 
 - Role-based login (`admin` and `ar`) with server-side cookie session.
 - Middleware-based route protection and role checks.
-- Main dashboard:
-  - Filters, search, pagination, sorting.
-  - Chart visualizations.
-  - XLSX export.
-- AR dashboard:
+- Main dashboard (`/dashboard`):
+  - Search, filtering, sorting, pagination.
+  - Category and payment status charts.
+  - Selectable-column XLSX export via API.
+  - Server bootstrap + client warm-cache refresh flow.
+- AR dashboard (`/dashboard-ar`):
   - Agent filtering and pagination.
-  - XLSX export.
-- Shortcuts page (admin):
+  - Per-row Google Maps action.
+  - Selectable-column XLSX export via API.
+  - SessionStorage warm cache.
+- Update page (`/update`, admin only):
+  - **Sync Report PRQ** from PRITI DATA (incremental append only).
+  - **Upload VISEEPRO** from XLS/XLSX (append newer timestamped rows only).
+- Shortcuts page (`/shortcuts`, admin only):
   - LocalStorage-backed categories and shortcut cards.
-  - Manual icon support (emoji or image URL), with default globe fallback.
-- Client-side warm cache for dashboard payloads to improve perceived load speed.
+  - Supports emoji or image URL icons with globe fallback.
 
 ## Project Structure
 
@@ -37,57 +48,85 @@ Data is fetched from Google Sheets (Visualization API response format) and rende
 app/
 ├── api/
 │   ├── auth/
-│   │   ├── login/route.ts    # Login endpoint, validates credentials and sets session cookie
-│   │   └── logout/route.ts   # Logout endpoint, clears session cookie
-│   └── sheets/
-│       ├── ar/route.ts       # AR dashboard data API
-│       └── main/route.ts     # Main dashboard data API
+│   │   ├── login/route.ts                 # Login endpoint (sets session cookie)
+│   │   └── logout/route.ts                # Logout endpoint (clears session cookie)
+│   ├── export/
+│   │   └── dashboard/route.ts             # XLSX export endpoint (ExcelJS)
+│   ├── sheets/
+│   │   ├── ar/route.ts                    # AR dashboard data API
+│   │   ├── main/route.ts                  # Main dashboard data API
+│   │   └── update/
+│   │       ├── sync-prq/route.ts          # Incremental sync to Report PRQ
+│   │       └── upload-viseepro/route.ts   # XLS/XLSX upload to VISEEPRO sheet
+│   └── shortcut-logo/
+│       └── route.ts                       # Website logo resolver/proxy utility
 ├── dashboard/
-│   ├── loading.tsx           # Loading state for admin dashboard
-│   └── page.tsx              # Admin dashboard page
+│   ├── loading.tsx                        # Loading skeleton/state for admin dashboard route
+│   └── page.tsx                           # Admin dashboard page (server bootstrap + shell)
 ├── dashboard-ar/
-│   ├── loading.tsx           # Loading state for AR dashboard
-│   └── page.tsx              # AR dashboard page
+│   ├── loading.tsx                        # Loading skeleton/state for AR dashboard route
+│   └── page.tsx                           # AR dashboard page (role-aware shell and nav)
 ├── login/
-│   └── page.tsx              # Login page
-├── shortcuts/
-│   └── page.tsx              # Shortcuts management page
-├── globals.css               # Global styles
-├── layout.tsx                # Root layout and metadata
-└── page.tsx                  # Entry page with auth-based redirect
+│   └── page.tsx                           # Login page entry (redirects away when already authed)
+├── update/
+│   └── page.tsx                           # Admin update tools page (PRQ sync + VISEEPRO upload)
+├── globals.css                            # Global Tailwind/theme styles
+├── layout.tsx                             # Root layout, metadata, and font setup
+└── page.tsx                               # Root entry: redirects by current server session
 components/
-├── app-shell.tsx             # Shared shell/header layout
-├── dashboard-client.tsx      # Main dashboard client logic (charts, table, filters, export)
-├── dashboard-ar-client.tsx   # AR dashboard client logic (table, filter, export)
-├── login-client.tsx          # Login form and mode switch (admin/ar)
-├── logout-button.tsx         # Logout action button
-└── shortcuts-client.tsx      # Shortcuts CRUD UI with localStorage persistence
+├── app-shell.tsx                          # Shared app frame (sidebar, topbar, logout)
+├── dashboard-client.tsx                   # Main dashboard client UI (filters/charts/table/export)
+├── dashboard-ar-client.tsx                # AR visit dashboard client UI (filter/table/maps/export)
+├── login-client.tsx                       # Login form client logic for admin/ar modes
+├── logout-button.tsx                      # Reusable logout action button
+├── shortcuts-client.tsx                   # Shortcuts CRUD UI with LocalStorage persistence
+└── update-client.tsx                      # Update actions UI for PRQ sync and XLS/XLSX upload
 lib/
-├── auth.ts                   # Session/auth helpers and credential resolution
-├── server-auth.ts            # Server-side auth guards and redirect helpers
-├── sheets.ts                 # Google Sheets fetch/parsing, cache, and stats utilities
-├── shortcuts.ts              # Shortcuts normalization and defaults
-└── types.ts                  # Shared TypeScript types
-middleware.ts                 # Route protection and role-based access control
+├── auth.ts                                # Session helpers, credential mapping, fingerprint checks
+├── google-sheets-api.ts                   # Google Sheets API read/append/format helpers
+├── nav-items.ts                           # Role-aware sidebar navigation builders
+├── pagination.ts                          # Pagination helper utilities for visible page ranges
+├── server-auth.ts                         # Server-side auth guards and redirects
+├── sheets.ts                              # Visualization API parsing + dashboard cache helpers
+├── shortcuts.ts                           # Shortcut normalization, defaults, and storage key
+└── types.ts                               # Shared TypeScript types/interfaces
+middleware.ts                              # Global route protection and role-based access middleware
 ```
 
 ## Environment Variables
 
-Create a `.env.local` file (or copy from `.env.example`) and fill:
+Copy `.env.example` to `.env.local` and fill values:
 
 ```bash
+# Visualization API endpoints (dashboard read)
 MAIN_SHEET_URL=
 AR_SHEET_URL=
+
+# Optional source URLs used to derive IDs for update actions
+REPORT_PRQ_SHEET_URL=
+COLLECTION_SHEET_URL=
+
+# Google Sheets API credentials (for update/write operations)
+GOOGLE_SHEETS_SERVICE_ACCOUNT_EMAIL=
+GOOGLE_SHEETS_PRIVATE_KEY=
+GOOGLE_SHEETS_PROJECT_ID=
+
+# Alternative credentials source (path to service account JSON)
+GOOGLE_APPLICATION_CREDENTIALS=
+
+# App login credentials
 PC_ADMIN_USERNAME=
 PC_ADMIN_PASSWORD=
 PC_AR_USERNAME=
 PC_AR_PASSWORD=
 ```
 
-### Notes
+### Environment Notes
 
-- `MAIN_SHEET_URL` and `AR_SHEET_URL` should be Google Sheets query endpoints compatible with the Visualization API response wrapper.
-- If a sheet URL is empty, related API routes return empty payloads.
+- `MAIN_SHEET_URL` and `AR_SHEET_URL` should return Google Visualization wrapper responses (`google.visualization.Query.setResponse(...)`).
+- Update endpoints require Google Sheets API credentials and target sheet IDs.
+- For update endpoints, `*_SHEET_ID` values are preferred. If omitted, IDs are derived from related sheet URLs when possible.
+- `GOOGLE_SHEETS_PRIVATE_KEY` should preserve newline formatting (commonly escaped as `\n` in `.env.local`).
 
 ## Installation
 
@@ -123,6 +162,7 @@ npm run start
 - `admin` can access:
   - `/dashboard`
   - `/dashboard-ar`
+  - `/update`
   - `/shortcuts`
 - `ar` can access:
   - `/dashboard-ar`
@@ -134,12 +174,17 @@ npm run start
 - `POST /api/auth/logout` - clear session cookie.
 - `GET /api/sheets/main` - main dashboard data (`?limit=` optional).
 - `GET /api/sheets/ar` - AR dashboard rows.
+- `POST /api/export/dashboard` - generate and download XLSX from submitted JSON rows.
+- `POST /api/sheets/update/sync-prq` - sync incremental rows from PRITI DATA (Collection) to Report PRQ.
+- `POST /api/sheets/update/upload-viseepro` - upload XLS/XLSX and append newer VISEEPRO rows.
+- `GET /api/shortcut-logo?url=...` - fetch/proxy best candidate favicon/logo for a URL.
 
 ## Security Model (Current)
 
-- Session stored in an HTTP-only cookie (`pc_session`).
+- Session stored in an HTTP-only cookie (`pc_session`) with `sameSite=lax`.
 - Session includes role, username, expiration, and request fingerprint.
-- Fingerprint is derived from headers (`user-agent`, `accept-language`, `sec-ch-ua-platform`) and validated on each request.
+- Fingerprint is derived from request headers (`user-agent`, `accept-language`, `sec-ch-ua-platform`) and validated per request.
+- Session TTL is 8 hours.
 
 ## Troubleshooting
 
@@ -148,5 +193,11 @@ npm run start
 - **Dashboard is empty**:
   - Verify `MAIN_SHEET_URL` / `AR_SHEET_URL` values.
   - Ensure source sheet endpoints are publicly reachable by the app runtime.
+- **Update endpoints fail with credential errors**:
+  - Verify `GOOGLE_SHEETS_*` vars or `GOOGLE_APPLICATION_CREDENTIALS`.
+  - Ensure the service account has access to target spreadsheets.
+- **Update sync/upload returns sheet ID configuration errors**:
+  - Set `PRITI_DATA_SHEET_ID`, `REPORT_PRQ_SHEET_ID`, and `VISEEPRO_SHEET_ID`.
+  - Or provide compatible sheet URLs to allow ID extraction.
 - **Unauthorized redirects despite login**:
-  - Browser or device header changes can invalidate fingerprint-bound sessions.
+  - Browser/device header changes can invalidate fingerprint-bound sessions.

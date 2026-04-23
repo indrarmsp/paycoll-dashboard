@@ -1,12 +1,12 @@
 import Link from 'next/link';
-import { ChartLine, Link2, MapPinned } from 'lucide-react';
+import { ChartLine, Link2, MapPinned, RotateCcw } from 'lucide-react';
 import { LogoutButton } from './logout-button';
 import type { ReactNode } from 'react';
 
 type NavItem = {
   href: string;
   label: string;
-  icon: 'dashboard' | 'shortcuts' | 'ar';
+  icon: 'dashboard' | 'shortcuts' | 'ar' | 'update';
   active: boolean;
 };
 
@@ -21,6 +21,10 @@ function NavIcon({ icon }: { icon: NavItem['icon'] }) {
     return <MapPinned className={className} />;
   }
 
+  if (icon === 'update') {
+    return <RotateCcw className={className} />;
+  }
+
   return <ChartLine className={className} />;
 }
 
@@ -30,8 +34,7 @@ export function AppShell({
   avatarLabel,
   avatarName,
   navItems,
-  children,
-  logoutHref = '/login?reason=logged_out'
+  children
 }: {
   sidebarTitle: string;
   headerTitle: string;
@@ -39,7 +42,6 @@ export function AppShell({
   avatarName: string;
   navItems: NavItem[];
   children: ReactNode;
-  logoutHref?: string;
 }) {
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-800">
