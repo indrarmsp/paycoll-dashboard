@@ -5,7 +5,16 @@ export const MAIN_SHEET_URL = process.env.MAIN_SHEET_URL?.trim() || '';
 export const AR_SHEET_URL = process.env.AR_SHEET_URL?.trim() || '';
 export const SHEET_FETCH_TIMEOUT_MS = 30_000;
 export const SHEET_CACHE_TTL_MS = 5 * 60 * 1000;
+export const DASHBOARD_AUTO_SYNC_INTERVAL_MS = (() => {
+  const rawValue = Number(process.env.NEXT_PUBLIC_DASHBOARD_SYNC_INTERVAL_MS || '60000');
+  if (!Number.isFinite(rawValue)) {
+    return 60_000;
+  }
+
+  return Math.max(15_000, rawValue);
+})();
 export const MAIN_DASHBOARD_BOOT_LIMIT = 1200;
+export const DASHBOARD_DATA_UPDATED_EVENT = 'pc-dashboard-data-updated';
 const MAIN_DASHBOARD_CACHE_KEY = 'pcMainDashboardCache';
 const AR_DASHBOARD_CACHE_KEY = 'pcARDashboardCache';
 const MAIN_DASHBOARD_BOOT_QUERY = `select * limit ${MAIN_DASHBOARD_BOOT_LIMIT}`;
