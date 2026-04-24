@@ -22,6 +22,17 @@ export interface AppendSheetOptions {
   };
 }
 
+type GoogleApiErrorShape = {
+  message?: string;
+  response?: {
+    data?: {
+      error?: {
+        message?: string;
+      };
+    };
+  };
+};
+
 type ServiceAccountJson = {
   client_email?: string;
   private_key?: string;
@@ -52,8 +63,7 @@ async function readServiceAccountFromFile() {
   };
 }
 
-// Initializes the Google Sheets client using service-account credentials.
-export async function initializeGoogleSheetsAPI() {
+async function initializeGoogleAuth() {
   const envEmail = process.env.GOOGLE_SHEETS_SERVICE_ACCOUNT_EMAIL?.trim() || '';
   const envPrivateKey = process.env.GOOGLE_SHEETS_PRIVATE_KEY?.replace(/\\n/g, '\n') || '';
   const envProjectId = process.env.GOOGLE_SHEETS_PROJECT_ID?.trim() || '';
@@ -77,13 +87,54 @@ export async function initializeGoogleSheetsAPI() {
     );
   }
 
-  const auth = new google.auth.JWT({
+  return new google.auth.JWT({
     email,
     key: privateKey,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    scopes: [
+      'https://www.googleapis.com/auth/spreadsheets',
+      'https://www.googleapis.com/auth/drive.readonly'
+    ]
   });
+}
+
+// Initializes the Google Sheets client using service-account credentials.
+export async function initializeGoogleSheetsAPI() {
+  const auth = await initializeGoogleAuth();
 
   return google.sheets({ version: 'v4', auth });
+}
+
+function getGoogleApiErrorMessage(error: unknown) {
+  const apiError = error as GoogleApiErrorShape;
+  return apiError?.response?.data?.error?.message || apiError?.message || 'Unknown error';
+}
+
+function isUnsupportedDocumentError(message: string) {
+  return message.toLowerCase().includes('operation is not supported for this document');
+}
+
+async function buildUnsupportedDocumentError(spreadsheetId: string, sheetName: string, originalMessage: string) {
+  const baseMessage = `Failed to fetch sheet data: ${originalMessage}`;
+
+  try {
+    const auth = await initializeGoogleAuth();
+    const drive = google.drive({ version: 'v3', auth });
+    const file = await drive.files.get({
+      fileId: spreadsheetId,
+      fields: 'id,name,mimeType'
+    });
+
+    const mimeType = file.data.mimeType || 'unknown';
+    const fileName = file.data.name || spreadsheetId;
+
+    if (mimeType !== 'application/vnd.google-apps.spreadsheet') {
+      return `${baseMessage}. Target "${fileName}" is "${mimeType}", not a native Google Spreadsheet. Convert it to Google Sheets format and use that spreadsheet ID for sheet "${sheetName}".`;
+    }
+
+    return `${baseMessage}. Spreadsheet exists, but sheet tab "${sheetName}" may be missing or unsupported.`;
+  } catch {
+    return `${baseMessage}. Verify spreadsheet ID is valid, shared to the service account, and points to a native Google Spreadsheet.`;
+  }
 }
 
 // Fetches the full visible range from a sheet and maps rows by header names.
@@ -111,7 +162,12 @@ export async function fetchSheetData(spreadsheetId: string, sheetName: string): 
 
     return { headers, rows };
   } catch (error) {
-    throw new Error(`Failed to fetch sheet data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    const message = getGoogleApiErrorMessage(error);
+    if (isUnsupportedDocumentError(message)) {
+      throw new Error(await buildUnsupportedDocumentError(spreadsheetId, sheetName, message));
+    }
+
+    throw new Error(`Failed to fetch sheet data: ${message}`);
   }
 }
 
