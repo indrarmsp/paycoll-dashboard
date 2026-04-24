@@ -16,7 +16,7 @@ import {
 import Chart from 'chart.js/auto';
 import type { DashboardStats, FilterOptions, MainDashboardPayload, MainRow } from '../lib/types';
 import { getVisiblePageNumbers } from '../lib/pagination';
-import { formatCurrency, formatNumber, getWarmMainDashboardPromise, readMainDashboardCache, warmMainDashboardCache, writeMainDashboardCache, MAIN_DASHBOARD_BOOT_LIMIT } from '../lib/sheets';
+import { DASHBOARD_AUTO_SYNC_INTERVAL_MS, DASHBOARD_DATA_UPDATED_EVENT, formatCurrency, formatNumber, getWarmMainDashboardPromise, readMainDashboardCache, warmMainDashboardCache, writeMainDashboardCache, MAIN_DASHBOARD_BOOT_LIMIT } from '../lib/sheets';
 
 type DashboardClientProps = {
   initialData?: {
@@ -245,6 +245,32 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const [selectedExportColumns, setSelectedExportColumns] = useState<string[]>(EXPORT_COLUMNS.map((column) => String(column.key)));
   const hasInitializedFilters = useRef(false);
 
+  function applyPayload(payload: MainDashboardPayload) {
+    setRows(payload.rows || []);
+    setFilterOptions(payload.filterOptions || { datel: [], billCategory: [], umurCustomer: [] });
+    setStats(payload.stats || { categoryStats: {}, paidCount: 0, unpaidCount: 0 });
+  }
+
+  async function refreshDashboardData() {
+    try {
+      const response = await fetch('/api/sheets/main?refresh=1', {
+        cache: 'no-store'
+      });
+      const payload = await response.json() as MainDashboardPayload & { message?: string };
+
+      if (!response.ok || !payload.rows) {
+        return;
+      }
+
+      writeMainDashboardCache(payload);
+      applyPayload(payload);
+      setLoading(false);
+      setHydrationDone(true);
+    } catch {
+      // Ignore transient refresh failures so the current table stays usable.
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -252,20 +278,18 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       try {
         const cachedPayload = readMainDashboardCache();
         if (cachedPayload) {
-          setRows(cachedPayload.rows || []);
-          setFilterOptions(cachedPayload.filterOptions || { datel: [], billCategory: [], umurCustomer: [] });
-          setStats(cachedPayload.stats || { categoryStats: {}, paidCount: 0, unpaidCount: 0 });
+          applyPayload(cachedPayload);
           setLoading(false);
           setHydrationDone(true);
+          void refreshDashboardData();
           return;
         }
 
         if (initialData) {
-          setRows(initialData.rows || []);
-          setFilterOptions(initialData.filterOptions || { datel: [], billCategory: [], umurCustomer: [] });
-          setStats(initialData.stats || { categoryStats: {}, paidCount: 0, unpaidCount: 0 });
+          applyPayload(initialData);
           setLoading(false);
           setHydrationDone(true);
+          void refreshDashboardData();
 
           if ((initialData.rows || []).length > 0 && (initialData.rows || []).length <= MAIN_DASHBOARD_BOOT_LIMIT) {
             void warmMainDashboardCache()
@@ -274,9 +298,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
                   return;
                 }
 
-                setRows(fullPayload.rows);
-                setFilterOptions(fullPayload.filterOptions || { datel: [], billCategory: [], umurCustomer: [] });
-                setStats(fullPayload.stats || { categoryStats: {}, paidCount: 0, unpaidCount: 0 });
+                applyPayload(fullPayload);
               })
               .catch(() => null);
           }
@@ -298,11 +320,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
               return;
             }
 
-            setRows(warmedPayload.rows || []);
-            setFilterOptions(warmedPayload.filterOptions || { datel: [], billCategory: [], umurCustomer: [] });
-            setStats(warmedPayload.stats || { categoryStats: {}, paidCount: 0, unpaidCount: 0 });
+            applyPayload(warmedPayload);
             setLoading(false);
             setHydrationDone(true);
+            void refreshDashboardData();
             return;
           }
         }
@@ -327,9 +348,11 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         }
 
         if (bootPayload.rows?.length) {
-          setRows(bootPayload.rows || []);
-          setFilterOptions(bootPayload.filterOptions || { datel: [], billCategory: [], umurCustomer: [] });
-          setStats(bootPayload.stats || { categoryStats: {}, paidCount: 0, unpaidCount: 0 });
+          applyPayload({
+            rows: bootPayload.rows || [],
+            filterOptions: bootPayload.filterOptions || { datel: [], billCategory: [], umurCustomer: [] },
+            stats: bootPayload.stats || { categoryStats: {}, paidCount: 0, unpaidCount: 0 }
+          });
         }
         setLoading(false);
 
@@ -356,9 +379,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
               }
 
               writeMainDashboardCache(payload);
-              setRows(fullPayload.rows);
-              setFilterOptions(payload.filterOptions);
-              setStats(payload.stats);
+              applyPayload(payload);
             })
             .catch(() => null);
         }
@@ -382,6 +403,57 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       cancelled = true;
     };
   }, [initialData]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let syncing = false;
+
+    async function syncDashboardIfVisible() {
+      if (cancelled || syncing || typeof document === 'undefined') {
+        return;
+      }
+
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+
+      syncing = true;
+      try {
+        await refreshDashboardData();
+      } catch {
+        // Ignore transient polling failures to keep current data visible.
+      } finally {
+        syncing = false;
+      }
+    }
+
+    const intervalId = window.setInterval(syncDashboardIfVisible, DASHBOARD_AUTO_SYNC_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleDashboardUpdate() {
+      void refreshDashboardData();
+    }
+
+    function handleStorageUpdate(event: StorageEvent) {
+      if (event.key === 'pcDashboardDataVersion') {
+        void refreshDashboardData();
+      }
+    }
+
+    window.addEventListener(DASHBOARD_DATA_UPDATED_EVENT, handleDashboardUpdate as EventListener);
+    window.addEventListener('storage', handleStorageUpdate);
+
+    return () => {
+      window.removeEventListener(DASHBOARD_DATA_UPDATED_EVENT, handleDashboardUpdate as EventListener);
+      window.removeEventListener('storage', handleStorageUpdate);
+    };
+  }, []);
 
   useEffect(() => {
     if (hasInitializedFilters.current) {
