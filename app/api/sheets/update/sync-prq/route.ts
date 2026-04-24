@@ -17,6 +17,15 @@ function getSheetIdFromUrl(url: string | undefined) {
   return match?.[1] || '';
 }
 
+function resolveSpreadsheetId(primaryValue: string | undefined, fallbackUrl?: string) {
+  const trimmed = primaryValue?.trim() || '';
+  if (trimmed) {
+    return getSheetIdFromUrl(trimmed) || trimmed;
+  }
+
+  return getSheetIdFromUrl(fallbackUrl);
+}
+
 function normalizeCell(value: unknown) {
   return String(value ?? '').trim();
 }
@@ -49,8 +58,8 @@ function remapCollectionRowsToReportPRQ(rows: SheetRow[], reportHeaders: string[
 // Syncs the Report PRQ sheet by appending only Collection rows that come after the last matched row.
 export async function POST() {
   try {
-    const pritiDataSheetId = process.env.PRITI_DATA_SHEET_ID?.trim() || getSheetIdFromUrl(process.env.COLLECTION_SHEET_URL);
-    const reportPRQSheetId = process.env.REPORT_PRQ_SHEET_ID?.trim() || getSheetIdFromUrl(process.env.REPORT_PRQ_SHEET_URL);
+    const pritiDataSheetId = resolveSpreadsheetId(process.env.PRITI_DATA_SHEET_ID, process.env.COLLECTION_SHEET_URL);
+    const reportPRQSheetId = resolveSpreadsheetId(process.env.REPORT_PRQ_SHEET_ID, process.env.REPORT_PRQ_SHEET_URL);
 
     if (!pritiDataSheetId || !reportPRQSheetId) {
       return NextResponse.json(
@@ -110,10 +119,22 @@ export async function POST() {
     );
   } catch (error) {
     console.error('Sync PRQ error:', error);
+
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    if (message.includes('not a native Google Spreadsheet')) {
+      return NextResponse.json(
+        {
+          error: 'Invalid target spreadsheet',
+          message
+        },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(
       {
         error: 'Sync failed',
-        message: error instanceof Error ? error.message : 'Unknown error occurred'
+        message
       },
       { status: 500 }
     );
