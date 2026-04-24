@@ -17,6 +17,15 @@ function getSheetIdFromUrl(url: string | undefined) {
   return match?.[1] || '';
 }
 
+function resolveSpreadsheetId(primaryValue: string | undefined, fallbackUrl?: string) {
+  const trimmed = primaryValue?.trim() || '';
+  if (trimmed) {
+    return getSheetIdFromUrl(trimmed) || trimmed;
+  }
+
+  return getSheetIdFromUrl(fallbackUrl);
+}
+
 function normalizeHeaderName(value: unknown) {
   return String(value ?? '').trim();
 }
@@ -271,13 +280,13 @@ function parseXlsxRows(worksheet: any): SheetRow[] {
 // Updates VISEEPRO by appending only uploaded rows with a newer timestamp.
 export async function POST(request: Request) {
   try {
-    const viseoproSheetId = process.env.VISEEPRO_SHEET_ID?.trim() || getSheetIdFromUrl(process.env.AR_SHEET_URL);
+    const viseoproSheetId = resolveSpreadsheetId(process.env.VISEEPRO_SHEET_ID, process.env.VISEEPRO_SHEET_URL);
 
     if (!viseoproSheetId) {
       return NextResponse.json(
         {
           error: 'Sheet ID not configured',
-          message: 'Please set VISEEPRO_SHEET_ID in .env.local'
+          message: 'Please set VISEEPRO_SHEET_ID (or VISEEPRO_SHEET_URL) in .env.local'
         },
         { status: 400 }
       );
@@ -366,10 +375,22 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     console.error('Upload Viseepro error:', error);
+
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    if (message.includes('not a native Google Spreadsheet')) {
+      return NextResponse.json(
+        {
+          error: 'Invalid target spreadsheet',
+          message
+        },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(
       {
         error: 'Upload failed',
-        message: error instanceof Error ? error.message : 'Unknown error occurred'
+        message
       },
       { status: 500 }
     );
