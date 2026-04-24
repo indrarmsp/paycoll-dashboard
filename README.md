@@ -105,6 +105,12 @@ AR_SHEET_URL=
 # Optional source URLs used to derive IDs for update actions
 REPORT_PRQ_SHEET_URL=
 COLLECTION_SHEET_URL=
+VISEEPRO_SHEET_URL=
+
+# Preferred spreadsheet IDs for update actions (can also accept full spreadsheet URLs)
+PRITI_DATA_SHEET_ID=
+REPORT_PRQ_SHEET_ID=
+VISEEPRO_SHEET_ID=
 
 # Google Sheets API credentials (for update/write operations)
 GOOGLE_SHEETS_SERVICE_ACCOUNT_EMAIL=
@@ -113,6 +119,9 @@ GOOGLE_SHEETS_PROJECT_ID=
 
 # Alternative credentials source (path to service account JSON)
 GOOGLE_APPLICATION_CREDENTIALS=
+
+# Optional dashboard auto-sync interval in milliseconds (minimum 15000)
+NEXT_PUBLIC_DASHBOARD_SYNC_INTERVAL_MS=60000
 
 # App login credentials
 PC_ADMIN_USERNAME=
@@ -127,6 +136,7 @@ PC_AR_PASSWORD=
 - Update endpoints require Google Sheets API credentials and target sheet IDs.
 - For update endpoints, `*_SHEET_ID` values are preferred. If omitted, IDs are derived from related sheet URLs when possible.
 - `GOOGLE_SHEETS_PRIVATE_KEY` should preserve newline formatting (commonly escaped as `\n` in `.env.local`).
+- Dashboards auto-refresh in the foreground using `NEXT_PUBLIC_DASHBOARD_SYNC_INTERVAL_MS` (defaults to 60 seconds).
 
 ## Installation
 
