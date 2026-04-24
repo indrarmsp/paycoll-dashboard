@@ -314,35 +314,51 @@ export function formatNumber(num: number) {
 // Maps raw main sheet rows into typed dashboard rows, filters, and chart stats.
 export function parseMainRows(table: NonNullable<GoogleSheetResponse['table']>): MainDashboardPayload {
   const rows = Array.isArray(table.rows) ? table.rows : [];
-  const columnCount = Array.isArray(table.cols) ? table.cols.length : 0;
-  const isProjectedShape = columnCount > 0 && columnCount <= 11;
-  const idx = isProjectedShape
-    ? {
-        snd: 0,
-        sndGroup: 1,
-        nama: 2,
-        alamat: 3,
-        datel: 4,
-        billCategory: 5,
-        saldo: 6,
-        umurCustomer: 7,
-        noHp: 8,
-        email: 9,
-        paidL11: 10
+  const columns = Array.isArray(table.cols) ? table.cols : [];
+  const normalizedColumnIndex = new Map<string, number>();
+
+  columns.forEach((column, index) => {
+    const rawLabel = String(column?.label ?? column?.id ?? '').trim().toLowerCase();
+    const rawId = String(column?.id ?? '').trim().toLowerCase();
+
+    if (rawLabel) {
+      normalizedColumnIndex.set(rawLabel, index);
+      normalizedColumnIndex.set(rawLabel.replace(/[^a-z0-9]+/g, ''), index);
+    }
+
+    if (rawId) {
+      normalizedColumnIndex.set(rawId, index);
+      normalizedColumnIndex.set(rawId.replace(/[^a-z0-9]+/g, ''), index);
+    }
+  });
+
+  const resolveIndex = (aliases: string[], fallbackIndex: number) => {
+    for (const alias of aliases) {
+      const normalizedAlias = alias.trim().toLowerCase();
+      const compactAlias = normalizedAlias.replace(/[^a-z0-9]+/g, '');
+      const resolved = normalizedColumnIndex.get(normalizedAlias) ?? normalizedColumnIndex.get(compactAlias);
+
+      if (resolved != null) {
+        return resolved;
       }
-    : {
-        snd: 4,
-        sndGroup: 5,
-        nama: 7,
-        alamat: 8,
-        datel: 10,
-        billCategory: 13,
-        saldo: 15,
-        umurCustomer: 16,
-        noHp: 17,
-        email: 18,
-        paidL11: 20
-      };
+    }
+
+    return fallbackIndex;
+  };
+
+  const idx = {
+    snd: resolveIndex(['snd', 'no snd'], 4),
+    sndGroup: resolveIndex(['snd group', 'sndgroup', 'snd_group'], 5),
+    nama: resolveIndex(['nama', 'name', 'customer name'], 7),
+    alamat: resolveIndex(['alamat', 'address'], 8),
+    datel: resolveIndex(['datel'], 10),
+    billCategory: resolveIndex(['bill category', 'billcategory'], 13),
+    saldo: resolveIndex(['saldo'], 15),
+    umurCustomer: resolveIndex(['umur customer', 'umur_customer', 'umurcustomer'], 16),
+    noHp: resolveIndex(['no hp', 'nohp', 'phone', 'phone number'], 17),
+    email: resolveIndex(['email'], 18),
+    paidL11: resolveIndex(['paid l11', 'paidl11', 'paid status', 'status'], 20)
+  };
 
   const parsedRows: MainRow[] = [];
   const datelSet = new Set<string>();
