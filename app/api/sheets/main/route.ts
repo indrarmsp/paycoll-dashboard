@@ -10,12 +10,16 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const limit = searchParams.get('limit');
+    const shouldRefresh = searchParams.get('refresh') === '1';
 
     const parsedLimit = Number(limit);
     const query = limit && Number.isFinite(parsedLimit) && parsedLimit > 0
       ? `select * limit ${parsedLimit}`
       : 'select *';
-    const data = await fetchGoogleSheetData(MAIN_SHEET_URL, { query });
+    const data = await fetchGoogleSheetData(MAIN_SHEET_URL, {
+      query,
+      forceRefresh: shouldRefresh
+    });
     return NextResponse.json(parseMainRows(data.table || {}));
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch dashboard data';
