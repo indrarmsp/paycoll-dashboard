@@ -8,6 +8,7 @@ import {
   LoaderCircle,
   RefreshCw
 } from 'lucide-react';
+import { DASHBOARD_DATA_UPDATED_EVENT } from '../lib/sheets';
 
 type UpdateStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -51,6 +52,20 @@ async function postJson<T>(url: string, body?: BodyInit) {
   };
 }
 
+function broadcastDashboardUpdate(source: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    const version = String(Date.now());
+    localStorage.setItem('pcDashboardDataVersion', version);
+    window.dispatchEvent(new CustomEvent(DASHBOARD_DATA_UPDATED_EVENT, { detail: { source, version } }));
+  } catch {
+    window.dispatchEvent(new CustomEvent(DASHBOARD_DATA_UPDATED_EVENT, { detail: { source } }));
+  }
+}
+
 // Main card UI that exposes the two update actions.
 export function UpdateClient() {
   const [prqStatus, setPrqStatus] = useState<UpdateStatus>('idle');
@@ -78,6 +93,7 @@ export function UpdateClient() {
 
       setPrqStatus('success');
       setPrqMessage(withStrategy(buildSuccessMessage(data.message, data.synced, 'records synced'), data.strategy));
+      broadcastDashboardUpdate('sync-prq');
 
       // Let the success state linger briefly before clearing it.
       setTimeout(() => setPrqStatus('idle'), 3000);
@@ -110,6 +126,7 @@ export function UpdateClient() {
 
       setViseoproStatus('success');
       setViseoproMessage(withStrategy(buildSuccessMessage(data.message, data.synced, 'records added'), data.strategy));
+      broadcastDashboardUpdate('upload-viseepro');
 
       // Clear the highlighted filename once the success state fades out.
       setTimeout(() => {
