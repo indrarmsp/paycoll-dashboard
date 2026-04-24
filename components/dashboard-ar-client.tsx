@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Download, LoaderCircle, X } from 'lucide-react';
 import type { ARRow } from '../lib/types';
 import { getVisiblePageNumbers } from '../lib/pagination';
-import { formatNumber, readARDashboardCache, writeARDashboardCache } from '../lib/sheets';
+import { DASHBOARD_AUTO_SYNC_INTERVAL_MS, DASHBOARD_DATA_UPDATED_EVENT, formatNumber, readARDashboardCache, writeARDashboardCache } from '../lib/sheets';
 
 type ExportColumn = {
   key: keyof ARRow;
@@ -64,8 +64,19 @@ export function DashboardARClient({ initialData }: DashboardARClientProps) {
     setLoading(false);
   }
 
-  async function fetchArRows() {
-    const response = await fetch('/api/sheets/ar');
+  async function refreshArRows() {
+    try {
+      const nextRows = await fetchArRows(true);
+      applyRows(nextRows);
+    } catch {
+      // Keep current rows if refresh fails.
+    }
+  }
+
+  async function fetchArRows(refresh = false) {
+    const response = await fetch(refresh ? '/api/sheets/ar?refresh=1' : '/api/sheets/ar', {
+      cache: refresh ? 'no-store' : 'default'
+    });
     const payload = await response.json() as { rows?: ARRow[]; message?: string };
 
     if (!response.ok) {
@@ -79,11 +90,13 @@ export function DashboardARClient({ initialData }: DashboardARClientProps) {
     const cachedRows = readARDashboardCache();
     if (cachedRows?.length) {
       applyRows(cachedRows);
+      void refreshArRows();
       return;
     }
 
     if (initialData?.length) {
       applyRows(initialData);
+      void refreshArRows();
       return;
     }
 
@@ -113,6 +126,57 @@ export function DashboardARClient({ initialData }: DashboardARClientProps) {
       cancelled = true;
     };
   }, [initialData]);
+
+  useEffect(() => {
+    function handleDashboardUpdate() {
+      void refreshArRows();
+    }
+
+    function handleStorageUpdate(event: StorageEvent) {
+      if (event.key === 'pcDashboardDataVersion') {
+        void refreshArRows();
+      }
+    }
+
+    window.addEventListener(DASHBOARD_DATA_UPDATED_EVENT, handleDashboardUpdate as EventListener);
+    window.addEventListener('storage', handleStorageUpdate);
+
+    return () => {
+      window.removeEventListener(DASHBOARD_DATA_UPDATED_EVENT, handleDashboardUpdate as EventListener);
+      window.removeEventListener('storage', handleStorageUpdate);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let syncing = false;
+
+    async function syncArIfVisible() {
+      if (cancelled || syncing || typeof document === 'undefined') {
+        return;
+      }
+
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+
+      syncing = true;
+      try {
+        await refreshArRows();
+      } catch {
+        // Keep existing data when a polling request fails.
+      } finally {
+        syncing = false;
+      }
+    }
+
+    const intervalId = window.setInterval(syncArIfVisible, DASHBOARD_AUTO_SYNC_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   const agentOptions = useMemo(() => {
     return Array.from(new Set(rows.map((row) => row.namaAgent).filter(Boolean))).sort((left, right) => left.localeCompare(right));
