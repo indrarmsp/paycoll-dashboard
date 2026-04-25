@@ -52,14 +52,12 @@ app/
 │   │   └── logout/route.ts                # Logout endpoint (clears session cookie)
 │   ├── export/
 │   │   └── dashboard/route.ts             # XLSX export endpoint (ExcelJS)
-│   ├── sheets/
-│   │   ├── ar/route.ts                    # AR dashboard data API
-│   │   ├── main/route.ts                  # Main dashboard data API
-│   │   └── update/
-│   │       ├── sync-prq/route.ts          # Incremental sync to Report PRQ
-│   │       └── upload-viseepro/route.ts   # XLS/XLSX upload to VISEEPRO sheet
-│   └── shortcut-logo/
-│       └── route.ts                       # Website logo resolver/proxy utility
+│   └── sheets/
+│       ├── ar/route.ts                    # AR dashboard data API
+│       ├── main/route.ts                  # Main dashboard data API
+│       └── update/
+│           ├── sync-prq/route.ts          # Incremental sync to Report PRQ
+│           └── upload-viseepro/route.ts   # XLS/XLSX upload to VISEEPRO sheet
 ├── dashboard/
 │   ├── loading.tsx                        # Loading skeleton/state for admin dashboard route
 │   └── page.tsx                           # Admin dashboard page (server bootstrap + shell)
@@ -68,6 +66,8 @@ app/
 │   └── page.tsx                           # AR dashboard page (role-aware shell and nav)
 ├── login/
 │   └── page.tsx                           # Login page entry (redirects away when already authed)
+├── shortcuts/
+│   └── page.tsx                           # Shortcuts page (admin-only, categories + CRUD)
 ├── update/
 │   └── page.tsx                           # Admin update tools page (PRQ sync + VISEEPRO upload)
 ├── globals.css                            # Global Tailwind/theme styles
@@ -77,18 +77,23 @@ components/
 ├── app-shell.tsx                          # Shared app frame (sidebar, topbar, logout)
 ├── dashboard-client.tsx                   # Main dashboard client UI (filters/charts/table/export)
 ├── dashboard-ar-client.tsx                # AR visit dashboard client UI (filter/table/maps/export)
+├── detail-modal.tsx                       # Reusable detail popup modal (label + value display)
+├── export-modal.tsx                       # XLSX export modal with column selection
 ├── login-client.tsx                       # Login form client logic for admin/ar modes
 ├── logout-button.tsx                      # Reusable logout action button
+├── pagination-controls.tsx                # Reusable pagination bar component
 ├── shortcuts-client.tsx                   # Shortcuts CRUD UI with LocalStorage persistence
 └── update-client.tsx                      # Update actions UI for PRQ sync and XLS/XLSX upload
 lib/
 ├── auth.ts                                # Session helpers, credential mapping, fingerprint checks
+├── export-utils.ts                        # XLSX export filename builder and download helper
 ├── google-sheets-api.ts                   # Google Sheets API read/append/format helpers
 ├── nav-items.ts                           # Role-aware sidebar navigation builders
 ├── pagination.ts                          # Pagination helper utilities for visible page ranges
 ├── server-auth.ts                         # Server-side auth guards and redirects
 ├── sheets.ts                              # Visualization API parsing + dashboard cache helpers
 ├── shortcuts.ts                           # Shortcut normalization, defaults, and storage key
+├── spreadsheet-utils.ts                   # Spreadsheet ID extraction and resolution helpers
 └── types.ts                               # Shared TypeScript types/interfaces
 middleware.ts                              # Global route protection and role-based access middleware
 ```
@@ -187,7 +192,6 @@ npm run start
 - `POST /api/export/dashboard` - generate and download XLSX from submitted JSON rows.
 - `POST /api/sheets/update/sync-prq` - sync incremental rows from PRITI DATA (Collection) to Report PRQ.
 - `POST /api/sheets/update/upload-viseepro` - upload XLS/XLSX and append newer VISEEPRO rows.
-- `GET /api/shortcut-logo?url=...` - fetch/proxy best candidate favicon/logo for a URL.
 
 ## Security Model (Current)
 
