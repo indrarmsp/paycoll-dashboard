@@ -100,25 +100,25 @@ export async function fetchGoogleSheetData(url: string, options?: { query?: stri
   }
 }
 
-// Reads cached main dashboard data from sessionStorage when still fresh.
-export function readMainDashboardCache() {
+// Generic sessionStorage cache reader with TTL check.
+function readSessionCache<T>(cacheKey: string): T | null {
   if (typeof window === 'undefined') {
     return null;
   }
 
   try {
-    const raw = sessionStorage.getItem(MAIN_DASHBOARD_CACHE_KEY);
+    const raw = sessionStorage.getItem(cacheKey);
     if (!raw) {
       return null;
     }
 
-    const parsed = JSON.parse(raw) as { savedAt?: number; payload?: MainDashboardPayload };
+    const parsed = JSON.parse(raw) as { savedAt?: number; payload?: T };
     if (!parsed.savedAt || !parsed.payload) {
       return null;
     }
 
     if (Date.now() - parsed.savedAt > SHEET_CACHE_TTL_MS) {
-      sessionStorage.removeItem(MAIN_DASHBOARD_CACHE_KEY);
+      sessionStorage.removeItem(cacheKey);
       return null;
     }
 
@@ -128,21 +128,29 @@ export function readMainDashboardCache() {
   }
 }
 
-// Stores main dashboard payload in sessionStorage with timestamp metadata.
-export function writeMainDashboardCache(payload: MainDashboardPayload) {
+// Generic sessionStorage cache writer with timestamp metadata.
+function writeSessionCache<T>(cacheKey: string, payload: T) {
   if (typeof window === 'undefined') {
     return;
   }
 
   try {
-    sessionStorage.setItem(MAIN_DASHBOARD_CACHE_KEY, JSON.stringify({
-      savedAt: Date.now(),
-      payload
-    }));
+    sessionStorage.setItem(cacheKey, JSON.stringify({ savedAt: Date.now(), payload }));
   } catch {
-    sessionStorage.removeItem(MAIN_DASHBOARD_CACHE_KEY);
+    sessionStorage.removeItem(cacheKey);
   }
 }
+
+// Reads cached main dashboard data from sessionStorage when still fresh.
+export function readMainDashboardCache() {
+  return readSessionCache<MainDashboardPayload>(MAIN_DASHBOARD_CACHE_KEY);
+}
+
+// Stores main dashboard payload in sessionStorage with timestamp metadata.
+export function writeMainDashboardCache(payload: MainDashboardPayload) {
+  writeSessionCache(MAIN_DASHBOARD_CACHE_KEY, payload);
+}
+
 
 // Warms main dashboard cache by prefetching API once per page lifecycle.
 export function warmMainDashboardCache() {
@@ -189,47 +197,14 @@ export function getWarmMainDashboardPromise() {
 
 // Reads cached AR dashboard rows from sessionStorage when still fresh.
 export function readARDashboardCache() {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  try {
-    const raw = sessionStorage.getItem(AR_DASHBOARD_CACHE_KEY);
-    if (!raw) {
-      return null;
-    }
-
-    const parsed = JSON.parse(raw) as { savedAt?: number; payload?: ARRow[] };
-    if (!parsed.savedAt || !parsed.payload) {
-      return null;
-    }
-
-    if (Date.now() - parsed.savedAt > SHEET_CACHE_TTL_MS) {
-      sessionStorage.removeItem(AR_DASHBOARD_CACHE_KEY);
-      return null;
-    }
-
-    return parsed.payload;
-  } catch {
-    return null;
-  }
+  return readSessionCache<ARRow[]>(AR_DASHBOARD_CACHE_KEY);
 }
 
 // Stores AR dashboard payload in sessionStorage with timestamp metadata.
 export function writeARDashboardCache(payload: ARRow[]) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  try {
-    sessionStorage.setItem(AR_DASHBOARD_CACHE_KEY, JSON.stringify({
-      savedAt: Date.now(),
-      payload
-    }));
-  } catch {
-    sessionStorage.removeItem(AR_DASHBOARD_CACHE_KEY);
-  }
+  writeSessionCache(AR_DASHBOARD_CACHE_KEY, payload);
 }
+
 
 // Warms AR dashboard cache by prefetching API once per page lifecycle.
 export function warmARDashboardCache() {

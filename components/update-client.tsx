@@ -9,6 +9,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { DASHBOARD_DATA_UPDATED_EVENT } from '../lib/sheets';
+import { toErrorMessage } from '../lib/export-utils';
 
 type UpdateStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -20,10 +21,6 @@ interface UpdateResponse {
   error?: string;
 }
 
-// Converts unknown failures into a display-friendly message.
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
 
 // Builds the short success message shown in the card footer.
 function buildSuccessMessage(message: string, synced?: number, suffix = 'records') {
@@ -99,7 +96,7 @@ export function UpdateClient() {
       setTimeout(() => setPrqStatus('idle'), 3000);
     } catch (error) {
       setPrqStatus('error');
-      setPrqMessage(getErrorMessage(error, 'Network error'));
+      setPrqMessage(toErrorMessage(error, 'Network error'));
     }
   }
 
@@ -138,7 +135,7 @@ export function UpdateClient() {
       }, 3000);
     } catch (error) {
       setViseoproStatus('error');
-      setViseoproMessage(getErrorMessage(error, 'Network error'));
+      setViseoproMessage(toErrorMessage(error, 'Network error'));
       setUploadedFileName('');
       if (fileInputRef.current) {
         fileInputRef.current.value = '';

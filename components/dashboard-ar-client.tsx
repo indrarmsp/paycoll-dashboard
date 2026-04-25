@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Download, LoaderCircle, X } from 'lucide-react';
+import { Download, LoaderCircle } from 'lucide-react';
 import type { ARRow } from '../lib/types';
-import { getVisiblePageNumbers } from '../lib/pagination';
-import { DASHBOARD_AUTO_SYNC_INTERVAL_MS, DASHBOARD_DATA_UPDATED_EVENT, formatNumber, readARDashboardCache, writeARDashboardCache } from '../lib/sheets';
+import { DASHBOARD_AUTO_SYNC_INTERVAL_MS, DASHBOARD_DATA_UPDATED_EVENT, readARDashboardCache, writeARDashboardCache } from '../lib/sheets';
+import { buildExportFilename, downloadXlsx, toErrorMessage } from '../lib/export-utils';
+import { DetailModal } from './detail-modal';
+import { ExportModal } from './export-modal';
+import { PaginationControls } from './pagination-controls';
 
 type ExportColumn = {
   key: keyof ARRow;
@@ -29,21 +32,6 @@ type DashboardARClientProps = {
 
 function getExportColumns(selectedExportColumns: string[]) {
   return EXPORT_COLUMNS.filter((column) => selectedExportColumns.includes(String(column.key)));
-}
-
-function buildExportFilename(currentPage: number, exportCurrentPageOnly: boolean) {
-  const now = new Date();
-  const stamp = [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, '0'),
-    String(now.getDate()).padStart(2, '0')
-  ].join('');
-  const suffix = exportCurrentPageOnly ? `_page${currentPage}` : '';
-  return `visit_ar_${stamp}${suffix}.xlsx`;
-}
-
-function toErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
 }
 
 export function DashboardARClient({ initialData }: DashboardARClientProps) {
@@ -247,34 +235,8 @@ export function DashboardARClient({ initialData }: DashboardARClientProps) {
       return record;
     });
 
-    const filename = buildExportFilename(currentPage, exportCurrentPageOnly);
-
-    // Call export API
-    fetch('/api/export/dashboard', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        filename,
-        sheetName: 'Visit AR',
-        data: exportRows
-      })
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error(`Export failed: ${response.statusText}`);
-        return response.blob();
-      })
-      .then((blob) => {
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        link.click();
-        URL.revokeObjectURL(url);
-      })
-      .catch((error) => {
-        window.alert(`Export failed: ${error.message}`);
-      });
-
+    const filename = buildExportFilename('visit_ar', currentPage, exportCurrentPageOnly);
+    downloadXlsx({ filename, sheetName: 'Visit AR', data: exportRows });
     closeExportModal();
   }
 
@@ -429,128 +391,34 @@ export function DashboardARClient({ initialData }: DashboardARClientProps) {
           ) : null}
         </div>
 
-        <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 p-4">
-          <div className="text-sm text-slate-500">
-            Showing <span className="font-semibold text-slate-700">{formatNumber(filteredRows.length === 0 ? 0 : (currentPage - 1) * limit + 1)}</span> to <span className="font-semibold text-slate-700">{formatNumber(Math.min(currentPage * limit, filteredRows.length))}</span> of <span className="font-semibold text-slate-700">{formatNumber(filteredRows.length)}</span> entries
-          </div>
-          <div className="flex items-center space-x-2">
-            <button
-              id="arPrevBtn"
-              type="button"
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-              disabled={currentPage === 1}
-              className="rounded border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <ChevronLeft className="mr-1 inline-block h-4 w-4" />
-              Previous
-            </button>
-            <div id="arPageNumbers" className="flex space-x-1">
-              {getVisiblePageNumbers(currentPage, maxPage).map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => setPage(item)}
-                  className={[
-                    'min-w-[32px] h-8 px-2 rounded text-sm font-medium transition-colors',
-                    item === currentPage ? 'bg-brand-500 text-white shadow-sm shadow-brand-500/30' : 'bg-white border text-slate-600 hover:bg-slate-50'
-                  ].join(' ')}
-                >
-                  {item}
-                </button>
-              ))}
-            </div>
-            <button
-              id="arNextBtn"
-              type="button"
-              onClick={() => setPage((current) => Math.min(maxPage, current + 1))}
-              disabled={currentPage === maxPage}
-              className="rounded border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Next
-              <ChevronRight className="ml-1 inline-block h-4 w-4" />
-            </button>
-          </div>
-        </div>
+        <PaginationControls
+          currentPage={currentPage}
+          maxPage={maxPage}
+          totalFiltered={filteredRows.length}
+          limit={limit}
+          onPageChange={setPage}
+          idPrefix="ar"
+        />
       </div>
 
       {detailModal ? (
-        <div id="addressModal" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm" onClick={(event) => {
-          if (event.target === event.currentTarget) {
-            setDetailModal(null);
-          }
-        }}>
-          <div className="m-4 w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-slate-800">{detailModal.label} Details</h3>
-              <button type="button" onClick={() => setDetailModal(null)} className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-              <p id="fullAddressText" className="leading-relaxed text-slate-700">{detailModal.value}</p>
-            </div>
-            <div className="mt-6 flex justify-end">
-              <button type="button" onClick={() => setDetailModal(null)} className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300">
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        <DetailModal
+          label={detailModal.label}
+          value={detailModal.value}
+          onClose={() => setDetailModal(null)}
+        />
       ) : null}
 
       {exportOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm" onClick={(event) => {
-          if (event.target === event.currentTarget) {
-            closeExportModal();
-          }
-        }}>
-          <div className="m-4 w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-slate-800">Download XLSX - Select Columns</h3>
-              <button type="button" onClick={closeExportModal} className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <p className="mb-3 text-sm text-slate-500">Select the columns you want to export from table data (using active filters).</p>
-            <div className="grid max-h-72 grid-cols-1 gap-2 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2 lg:grid-cols-3">
-              {EXPORT_COLUMNS.map((column) => (
-                <label key={String(column.key)} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-100">
-                  <input
-                    type="checkbox"
-                    checked={selectedExportColumns.includes(String(column.key))}
-                    onChange={(event) => {
-                      const { checked } = event.target;
-                      setSelectedExportColumns((current) => (
-                        checked
-                          ? [...current, String(column.key)]
-                          : current.filter((item) => item !== String(column.key))
-                      ));
-                    }}
-                    className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                  />
-                  <span>{column.label}</span>
-                </label>
-              ))}
-            </div>
-            <label className="mt-3 inline-flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                checked={exportCurrentPageOnly}
-                onChange={(event) => setExportCurrentPageOnly(event.target.checked)}
-                className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-              />
-              <span>Export current page only</span>
-            </label>
-            <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={closeExportModal} className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-300">
-                Cancel
-              </button>
-              <button type="button" onClick={handleDownload} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">
-                Download
-              </button>
-            </div>
-          </div>
-        </div>
+        <ExportModal
+          columns={EXPORT_COLUMNS.map((c) => ({ key: String(c.key), label: c.label }))}
+          selectedColumns={selectedExportColumns}
+          onSelectedColumnsChange={setSelectedExportColumns}
+          exportCurrentPageOnly={exportCurrentPageOnly}
+          onExportCurrentPageOnlyChange={setExportCurrentPageOnly}
+          onDownload={handleDownload}
+          onClose={closeExportModal}
+        />
       ) : null}
     </div>
   );
