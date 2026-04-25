@@ -7,24 +7,8 @@ import {
   findHeaderByAliases,
   type SheetRow
 } from '../../../../../lib/google-sheets-api';
+import { resolveSpreadsheetId } from '../../../../../lib/spreadsheet-utils';
 
-function getSheetIdFromUrl(url: string | undefined) {
-  if (!url) {
-    return '';
-  }
-
-  const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  return match?.[1] || '';
-}
-
-function resolveSpreadsheetId(primaryValue: string | undefined, fallbackUrl?: string) {
-  const trimmed = primaryValue?.trim() || '';
-  if (trimmed) {
-    return getSheetIdFromUrl(trimmed) || trimmed;
-  }
-
-  return getSheetIdFromUrl(fallbackUrl);
-}
 
 function normalizeHeaderName(value: unknown) {
   return String(value ?? '').trim();

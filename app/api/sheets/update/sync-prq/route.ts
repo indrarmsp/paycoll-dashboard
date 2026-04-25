@@ -3,32 +3,13 @@ import {
   fetchSheetData,
   appendToSheet,
   findHeaderByAliases,
-  findIncrementalRowsFromLastMatch
+  findIncrementalRowsFromLastMatch,
+  normalizeCell
 } from '../../../../../lib/google-sheets-api';
+import { resolveSpreadsheetId } from '../../../../../lib/spreadsheet-utils';
 
 type SheetRow = Record<string, unknown>;
 
-function getSheetIdFromUrl(url: string | undefined) {
-  if (!url) {
-    return '';
-  }
-
-  const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  return match?.[1] || '';
-}
-
-function resolveSpreadsheetId(primaryValue: string | undefined, fallbackUrl?: string) {
-  const trimmed = primaryValue?.trim() || '';
-  if (trimmed) {
-    return getSheetIdFromUrl(trimmed) || trimmed;
-  }
-
-  return getSheetIdFromUrl(fallbackUrl);
-}
-
-function normalizeCell(value: unknown) {
-  return String(value ?? '').trim();
-}
 
 function remapCollectionRowsToReportPRQ(rows: SheetRow[], reportHeaders: string[]) {
   if (!rows.length || !reportHeaders.length) {

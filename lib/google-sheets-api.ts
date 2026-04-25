@@ -399,7 +399,7 @@ function normalizeHeaderName(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-function normalizeCell(value: unknown) {
+export function normalizeCell(value: unknown) {
   return String(value ?? '').trim();
 }
 
